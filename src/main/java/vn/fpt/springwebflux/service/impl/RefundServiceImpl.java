@@ -21,6 +21,7 @@ import vn.fpt.springwebflux.utils.DataUtils;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
@@ -66,16 +67,20 @@ public class RefundServiceImpl implements RefundService {
                         if (!DataUtils.isNullOrEmpty(transactionReq)) {
                             //neu id == null -> insert ban ghi moi
                             if (DataUtils.isNullOrEmpty(transactionReq.getTransactionReqid())) {
-                                saveTran(new Transaction(null, transactionReq.getTransactionReqTranId(), transactionReq.getTransactionReqTitle(), transactionReq.getTransactionReqAmount(), transactionReq.getTransactionReqDescription(), LocalDateTime.now(), LocalDateTime.now(), 1));
-                                return Mono.just(new BaseResponse(ERROR_CODE_01, SAVE_SUCCESSFULLY, null));
+                                return transactionRepository.save(new Transaction(null, transactionReq.getTransactionReqTranId(), transactionReq.getTransactionReqTitle(), transactionReq.getTransactionReqAmount(), transactionReq.getTransactionReqDescription(), LocalDateTime.now(), LocalDateTime.now(), 1)).flatMap(tran -> {
+                                    return Mono.just(new BaseResponse(ERROR_CODE_01, SAVE_SUCCESSFULLY, null));
+                                });
                             } else {
                                 //neu id != null -> update ban ghi do
                                 //check finby truoc do tim thay ban ghi do chua neu roi thi update neu chua co thi findby lai vao dn
                                 Optional<Transaction> optionalTransaction = tuple.getT1().stream().filter(tran -> tran.getId().equals(transactionReq.getTransactionReqid())).findFirst();
                                 if (optionalTransaction.isPresent()) {
-                                    saveTran(new Transaction(optionalTransaction.get().getId(), transactionReq.getTransactionReqTranId(), transactionReq.getTransactionReqTitle(), transactionReq.getTransactionReqAmount(), transactionReq.getTransactionReqDescription(), LocalDateTime.now(), LocalDateTime.now(), 1));
-                                    return Mono.just(new BaseResponse(ERROR_CODE_01, UPDATE_SUCCESSFULLY, null));
+                                  return transactionRepository.save(new Transaction(optionalTransaction.get().getId(), transactionReq.getTransactionReqTranId(), transactionReq.getTransactionReqTitle(), transactionReq.getTransactionReqAmount(), transactionReq.getTransactionReqDescription(), LocalDateTime.now(), LocalDateTime.now(), 1)).flatMap(tran -> {
+                                      return Mono.just(new BaseResponse(ERROR_CODE_01, UPDATE_SUCCESSFULLY, null));
+                                  });
                                 } else {
+                                    // finby theo truon id -> neu co update laij ban ghi theo cac ttruong tu input,
+                                    //neu ko thoong bao update ko thanh cong
                                     return transactionRepository.findById(transactionReq.getTransactionReqid()).flatMap(checkTransaction -> {
                                         if (DataUtils.isNullOrEmpty(checkTransaction)) {
                                             return transactionRepository.save(new Transaction(optionalTransaction.get().getId(), transactionReq.getTransactionReqTranId(), transactionReq.getTransactionReqTitle(), transactionReq.getTransactionReqAmount(), transactionReq.getTransactionReqDescription(), LocalDateTime.now(), LocalDateTime.now(), 1)).flatMap(tran -> {
@@ -97,6 +102,8 @@ public class RefundServiceImpl implements RefundService {
                             } else {
                                 //check finby truoc do tim thay ban ghi do chua neu roi thi update neu chua co thi findby lai vao dn
                                 Optional<Refund> optionalRefund = tuple.getT2().stream().filter(ref -> ref.getId().equals(refundReq.getRefundReqId())).findFirst();
+                                //check trong list da find truoc do
+                                //neu co thif ko phai find laij
                                 if (optionalRefund.isPresent()) {
                                     return refundRepository.save(
                                             new Refund(optionalRefund.get().getId(), refundReq.getRefundReqTranId(), refundReq.getRefundReqType(), refundReq.getRefundReqNote(), LocalDateTime.now(), LocalDateTime.now(), 1)
@@ -139,6 +146,7 @@ public class RefundServiceImpl implements RefundService {
                                 childCus.setTitle(transaction.getTitle());
                                 childCus.setDescription(transaction.getDescription());
                             }
+
                         });
                         eachDecl.getClassCustomerList().forEach(classCus -> {
                             Optional<Refund> refundOptional = tuple.getT2().stream().filter(refund -> refund.getTranId().equals(classCus.getTranId())).findFirst();
@@ -147,7 +155,8 @@ public class RefundServiceImpl implements RefundService {
                                 if (!DataUtils.isNullOrEmpty(isDelete) && isDelete) {
                                     refund.setStatus(0);
                                     refund.setUpdatedAt(LocalDateTime.now());
-                                    saveRef(refund);
+                                    refundRepository.save(refund).subscribe(a -> {
+                                    });
                                 }
                                 //set lai cac truong type, note
                                 classCus.setType(refund.getType());
@@ -157,6 +166,11 @@ public class RefundServiceImpl implements RefundService {
                         if (isDelete) {
                             return Mono.just(new BaseResponse(ERROR_CODE_01, "Xoá Thành công", null));
                         }
+
+                        //xắp xếp danh sách childCustomer tang dan
+                        eachDecl.getChildCustomerList().sort(Comparator.comparing(ChildCustomerMapDTO::getSort));
+                        //xắp xếp danh sách clasCustomer giam dan
+                        eachDecl.getClassCustomerList().sort(Comparator.comparing(ClassCustomerMapDTO::getSort).reversed());
                         return Mono.just(new BaseResponse(ERROR_CODE_01, "TC", eachDecl));
                     });
                 });
@@ -164,13 +178,4 @@ public class RefundServiceImpl implements RefundService {
         });
     }
 
-    public void saveTran(Transaction transaction) {
-        transactionRepository.save(transaction).subscribe(tran -> {
-        });
-    }
-
-    public void saveRef(Refund refund) {
-        refundRepository.save(refund).subscribe(ref -> {
-        });
-    }
 }
