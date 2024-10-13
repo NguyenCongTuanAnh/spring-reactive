@@ -10,6 +10,8 @@ import vn.fpt.springwebflux.model.response.BaseResponse;
 import vn.fpt.springwebflux.service.ApiService;
 import vn.fpt.springwebflux.service.RefundService;
 
+import static vn.fpt.springwebflux.constant.ErrorCodeConstant.ERROR_CODE_01;
+
 @RestController
 @RequiredArgsConstructor
 public class DeclCustomerController {
@@ -19,7 +21,7 @@ public class DeclCustomerController {
     @GetMapping("/get-decl-cus")
     public Mono<BaseResponse> getDeclCus() {
         return apiService.getDecl("1").map(decl ->
-                new BaseResponse(1, "Thành công", decl)
+                new BaseResponse(ERROR_CODE_01, "Thành công", decl)
         );
     }
 
