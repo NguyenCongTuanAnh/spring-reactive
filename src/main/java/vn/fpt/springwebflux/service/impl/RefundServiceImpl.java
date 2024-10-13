@@ -1,6 +1,7 @@
 package vn.fpt.springwebflux.service.impl;
 
 import lombok.RequiredArgsConstructor;
+import org.springframework.boot.context.properties.bind.DefaultValue;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Mono;
 import vn.fpt.springwebflux.exception.BusinessException;
@@ -44,7 +45,7 @@ public class RefundServiceImpl implements RefundService {
                 .defaultIfEmpty(new BaseResponse(ERROR_CODE_01, "No refunds found", null));
     }
     @Override
-    public Mono<BaseResponse> getListDeclCustomerV1(TransactionReq transactionReq, RefundReq refundReq, Boolean isDelete) {
+    public Mono<BaseResponse> getListDeclCustomerV1( TransactionReq transactionReq, RefundReq refundReq, Boolean isDelete) {
         return apiService.getDecl(DECL_CODE).flatMap(decl -> {
             if (DataUtils.isNullOrEmpty(decl)) {
                 return Mono.error(new BusinessException(ERROR_CODE_500, NOT_FOUND_DECL, null));
@@ -58,13 +59,12 @@ public class RefundServiceImpl implements RefundService {
                         .childCustomerList(new ArrayList<ChildCustomerMapDTO>(parseDecl.getChildCustomer().values()))
                         .classCustomerList(new ArrayList<ClassCustomerMapDTO>(parseDecl.getClassCustomer().values()))
                         .build());
-
                 return declOutputDTO.flatMap(eachDecl -> {
                     return Mono.zip(
                             transactionRepository.findAllByTranId((eachDecl.getChildCustomerList().stream().map(ChildCustomerMapDTO::getTranId).collect(Collectors.toList()))).collectList(),
                             refundRepository.findAllByTranId((eachDecl.getClassCustomerList().stream().map(ClassCustomerMapDTO::getTranId).collect(Collectors.toList()))).collectList()
                     ).flatMap(tuple -> {
-                        if (!DataUtils.isNullOrEmpty(transactionReq)) {
+                        if (!DataUtils.isNullOrEmpty(transactionReq.getTransactionReqTranId())) {
                             //neu id == null -> insert ban ghi moi
                             if (DataUtils.isNullOrEmpty(transactionReq.getTransactionReqid())) {
                                 return transactionRepository.save(new Transaction(null, transactionReq.getTransactionReqTranId(), transactionReq.getTransactionReqTitle(), transactionReq.getTransactionReqAmount(), transactionReq.getTransactionReqDescription(), LocalDateTime.now(), LocalDateTime.now(), 1)).flatMap(tran -> {
@@ -93,7 +93,7 @@ public class RefundServiceImpl implements RefundService {
                                 }
                             }
                         }
-                        if (!DataUtils.isNullOrEmpty(refundReq)) {
+                        if (!DataUtils.isNullOrEmpty(refundReq.getRefundReqTranId())) {
                             //neu id == null -> insert ban ghi moi
                             if (DataUtils.isNullOrEmpty(refundReq.getRefundReqId())) {
                                 return refundRepository.save(new Refund(null, refundReq.getRefundReqTranId(), refundReq.getRefundReqType(), refundReq.getRefundReqNote(), LocalDateTime.now(), LocalDateTime.now(), 1)).flatMap(ref -> {
@@ -128,7 +128,7 @@ public class RefundServiceImpl implements RefundService {
                             return Mono.just(new BaseResponse(ERROR_CODE_500, "Thành cong", null));
                         }
                         if (DataUtils.isNullOrEmpty(tuple.getT2())) {
-                            return Mono.just(new BaseResponse(ERROR_CODE_01, "Không có hoan tra nào hop le", null));
+                            return Mono.just(new BaseResponse(ERROR_CODE_500, "Thành cong", null));
                         }
                         eachDecl.getChildCustomerList().forEach(childCus -> {
                             Optional<Transaction> transactionOptional = tuple.getT1().stream().filter(transaction -> transaction.getTranId().equals(childCus.getTranId())).findFirst();
@@ -146,7 +146,6 @@ public class RefundServiceImpl implements RefundService {
                                 childCus.setTitle(transaction.getTitle());
                                 childCus.setDescription(transaction.getDescription());
                             }
-
                         });
                         eachDecl.getClassCustomerList().forEach(classCus -> {
                             Optional<Refund> refundOptional = tuple.getT2().stream().filter(refund -> refund.getTranId().equals(classCus.getTranId())).findFirst();
@@ -163,10 +162,9 @@ public class RefundServiceImpl implements RefundService {
                                 classCus.setNote(refund.getNote());
                             }
                         });
-                        if (isDelete) {
+                        if (!DataUtils.isNullOrEmpty(isDelete) && isDelete) {
                             return Mono.just(new BaseResponse(ERROR_CODE_01, "Xoá Thành công", null));
                         }
-
                         //xắp xếp danh sách childCustomer tang dan
                         eachDecl.getChildCustomerList().sort(Comparator.comparing(ChildCustomerMapDTO::getSort));
                         //xắp xếp danh sách clasCustomer giam dan
