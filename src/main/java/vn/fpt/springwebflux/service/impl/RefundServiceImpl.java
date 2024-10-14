@@ -57,7 +57,7 @@ public class RefundServiceImpl implements RefundService {
     private Mono<BaseResponse> parseAndProcessDecl(String declValue, TransactionReq transactionReq, RefundReq refundReq, Boolean isDelete) {
         return DataUtils.parseStringToObject(declValue, DeclInputDTO.class)
                 .flatMap(parsedDecl -> {
-                    if (DataUtils.isNullOrEmpty(parsedDecl)){
+                    if (DataUtils.isNullOrEmpty(parsedDecl)) {
                         return Mono.just(new BaseResponse(ERROR_CODE_500, PARSE_DATA_UNSUCCESSFULLY, null));
                     }
                     DeclOutputDTO declOutputDTO = createDeclOutputDTO(parsedDecl);
@@ -101,34 +101,32 @@ public class RefundServiceImpl implements RefundService {
 
     private Mono<BaseResponse> handleTransaction(TransactionReq transactionReq, java.util.List<Transaction> transactions) {
         if (!transactionReq.isValidate()) {
-            return Mono.just(  new BaseResponse(ERROR_CODE_01, SAVE_UNSUCCESSFULLY, null));
+            return Mono.just(new BaseResponse(ERROR_CODE_01, SAVE_UNSUCCESSFULLY, null));
         }
-
         return findAndSaveTransaction(transactionReq, transactions);
     }
-
     private Mono<BaseResponse> findAndSaveTransaction(TransactionReq transactionReq, java.util.List<Transaction> transactions) {
-      //validate input
+        //validate input
         transactionReq.isValidate();
-       //Neu ipput ko co truyen id - insert ban ghi moi
-        if (DataUtils.isNullOrEmpty(transactionReq.getTransactionReqid())){
-           Transaction transaction = new Transaction();
-           transaction.setTranId(transactionReq.getTransactionReqTranId());
-           transaction.setTitle(transactionReq.getTransactionReqTitle());
-           transaction.setAmount(transactionReq.getTransactionReqAmount());
-           transaction.setDescription(transactionReq.getTransactionReqDescription());
-           transaction.setUpdatedAt(LocalDateTime.now());
-           transaction.setStatus(ACTIVE_STATUS);
-           return transactionRepository.save(transaction).map(tran -> {
-               return new BaseResponse(ERROR_CODE_01, SAVE_UNSUCCESSFULLY, null);
-           });
-       }
+        //Neu ipput ko co truyen id - insert ban ghi moi
+        if (DataUtils.isNullOrEmpty(transactionReq.getTransactionReqid())) {
+            Transaction transaction = new Transaction();
+            transaction.setTranId(transactionReq.getTransactionReqTranId());
+            transaction.setTitle(transactionReq.getTransactionReqTitle());
+            transaction.setAmount(transactionReq.getTransactionReqAmount());
+            transaction.setDescription(transactionReq.getTransactionReqDescription());
+            transaction.setUpdatedAt(LocalDateTime.now());
+            transaction.setStatus(ACTIVE_STATUS);
+            return transactionRepository.save(transaction).map(tran -> {
+                return new BaseResponse(ERROR_CODE_01, SAVE_UNSUCCESSFULLY, null);
+            });
+        }
         //neu iput cis truyen id -> neu khong tim thay transaction thi bao loi
         //neu tim thay thif update lai cac truong vao db
         return transactionRepository.findById(transactionReq.getTransactionReqid())
                 .flatMap(transaction -> {
-                    if (DataUtils.isNullOrEmpty(transaction)){
-                        return Mono.error(new BusinessException(ERROR_CODE_500, NOT_FOUND_TRANSACTION,null));
+                    if (DataUtils.isNullOrEmpty(transaction)) {
+                        return Mono.error(new BusinessException(ERROR_CODE_500, NOT_FOUND_TRANSACTION, null));
                     }
                     transaction.setTranId(transactionReq.getTransactionReqTranId());
                     transaction.setTitle(transactionReq.getTransactionReqTitle());
@@ -136,7 +134,7 @@ public class RefundServiceImpl implements RefundService {
                     transaction.setDescription(transactionReq.getTransactionReqDescription());
                     transaction.setUpdatedAt(LocalDateTime.now());
                     transaction.setStatus(1);
-                    if (!DataUtils.isNullOrEmpty(transactionReq.getTransactionReqid())){
+                    if (!DataUtils.isNullOrEmpty(transactionReq.getTransactionReqid())) {
                         transaction.setId(transactionReq.getTransactionReqid());
                         return transactionRepository.save(transaction).map(tran -> {
                             return new BaseResponse(ERROR_CODE_01, SAVE_UNSUCCESSFULLY, null);
@@ -147,9 +145,9 @@ public class RefundServiceImpl implements RefundService {
                     });
                 });
     }
+
     private Mono<BaseResponse> handleRefund(RefundReq refundReq, java.util.List<Refund> refunds) {
         if (DataUtils.isNullOrEmpty(refundReq.getRefundReqTranId())) return Mono.empty();
-
         return findAndSaveRefund(refundReq, refunds)
                 .flatMap(ref -> Mono.just(new BaseResponse(ERROR_CODE_01, SAVE_UNSUCCESSFULLY, null)));
     }
@@ -158,7 +156,7 @@ public class RefundServiceImpl implements RefundService {
         //validate input
         refundReq.isValidate();
         //Neu ipput ko co truyen id - insert ban ghi moi
-        if (DataUtils.isNullOrEmpty(refundReq.getRefundReqId())){
+        if (DataUtils.isNullOrEmpty(refundReq.getRefundReqId())) {
             Refund refund = new Refund();
             refund.setTranId(refundReq.getRefundReqTranId());
             refund.setType(refundReq.getRefundReqType());
@@ -171,8 +169,8 @@ public class RefundServiceImpl implements RefundService {
         }
         return refundRepository.findById(refundReq.getRefundReqId())
                 .flatMap(refund -> {
-                    if (DataUtils.isNullOrEmpty(refund)){
-                        return Mono.error(new BusinessException(ERROR_CODE_500, NOT_FOUND_TRANSACTION,null));
+                    if (DataUtils.isNullOrEmpty(refund)) {
+                        return Mono.error(new BusinessException(ERROR_CODE_500, NOT_FOUND_TRANSACTION, null));
                     }
                     refund.setTranId(refundReq.getRefundReqTranId());
                     refund.setType(refundReq.getRefundReqType());
@@ -182,6 +180,7 @@ public class RefundServiceImpl implements RefundService {
                     return refundRepository.save(refund).map(ref -> new BaseResponse(ERROR_CODE_01, SAVE_UNSUCCESSFULLY, null));
                 });
     }
+
     private Mono<BaseResponse> updateCustomerDetails(DeclOutputDTO declOutputDTO, Boolean isDelete, java.util.List<Transaction> transactions, java.util.List<Refund> refunds) {
         declOutputDTO.getChildCustomerList().forEach(child -> updateChildCustomer(child, transactions, isDelete));
         declOutputDTO.getClassCustomerList().forEach(cls -> updateClassCustomer(cls, refunds, isDelete));
