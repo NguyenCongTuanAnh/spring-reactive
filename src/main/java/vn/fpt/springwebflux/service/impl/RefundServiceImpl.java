@@ -1,7 +1,6 @@
 package vn.fpt.springwebflux.service.impl;
 
 import lombok.RequiredArgsConstructor;
-import org.springframework.boot.context.properties.bind.DefaultValue;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Mono;
 import vn.fpt.springwebflux.exception.BusinessException;
@@ -23,7 +22,6 @@ import vn.fpt.springwebflux.utils.DataUtils;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.Optional;
 import java.util.stream.Collectors;
 
 import static vn.fpt.springwebflux.constant.CommonConstant.*;
@@ -44,136 +42,189 @@ public class RefundServiceImpl implements RefundService {
                 .map(refunds -> new BaseResponse(ERROR_CODE_01, "", refunds))
                 .defaultIfEmpty(new BaseResponse(ERROR_CODE_01, "No refunds found", null));
     }
+
     @Override
-    public Mono<BaseResponse> getListDeclCustomerV1( TransactionReq transactionReq, RefundReq refundReq, Boolean isDelete) {
-        return apiService.getDecl(DECL_CODE).flatMap(decl -> {
-            if (DataUtils.isNullOrEmpty(decl)) {
-                return Mono.error(new BusinessException(ERROR_CODE_500, NOT_FOUND_DECL, null));
-            }
-            Mono<DeclInputDTO> parsedDecl = DataUtils.parseStringToObject(decl.getValue(), DeclInputDTO.class);
-//            chuyển đổi kiểu dự liệu map -> list
-            return parsedDecl.flatMap(parseDecl -> {
-                Mono<DeclOutputDTO> declOutputDTO = Mono.just(DeclOutputDTO.builder()
-                        .name(parseDecl.getName())
-                        .sortOrder(parseDecl.getSortOrder())
-                        .childCustomerList(new ArrayList<ChildCustomerMapDTO>(parseDecl.getChildCustomer().values()))
-                        .classCustomerList(new ArrayList<ClassCustomerMapDTO>(parseDecl.getClassCustomer().values()))
-                        .build());
-                return declOutputDTO.flatMap(eachDecl -> {
-                    return Mono.zip(
-                            transactionRepository.findAllByTranId((eachDecl.getChildCustomerList().stream().map(ChildCustomerMapDTO::getTranId).collect(Collectors.toList()))).collectList(),
-                            refundRepository.findAllByTranId((eachDecl.getClassCustomerList().stream().map(ClassCustomerMapDTO::getTranId).collect(Collectors.toList()))).collectList()
-                    ).flatMap(tuple -> {
-                        if (!DataUtils.isNullOrEmpty(transactionReq.getTransactionReqTranId())) {
-                            //neu id == null -> insert ban ghi moi
-                            if (DataUtils.isNullOrEmpty(transactionReq.getTransactionReqid())) {
-                                return transactionRepository.save(new Transaction(null, transactionReq.getTransactionReqTranId(), transactionReq.getTransactionReqTitle(), transactionReq.getTransactionReqAmount(), transactionReq.getTransactionReqDescription(), LocalDateTime.now(), LocalDateTime.now(), 1)).flatMap(tran -> {
-                                    return Mono.just(new BaseResponse(ERROR_CODE_01, SAVE_SUCCESSFULLY, null));
-                                });
-                            } else {
-                                //neu id != null -> update ban ghi do
-                                //check finby truoc do tim thay ban ghi do chua neu roi thi update neu chua co thi findby lai vao dn
-                                Optional<Transaction> optionalTransaction = tuple.getT1().stream().filter(tran -> tran.getId().equals(transactionReq.getTransactionReqid())).findFirst();
-                                if (optionalTransaction.isPresent()) {
-                                  return transactionRepository.save(new Transaction(optionalTransaction.get().getId(), transactionReq.getTransactionReqTranId(), transactionReq.getTransactionReqTitle(), transactionReq.getTransactionReqAmount(), transactionReq.getTransactionReqDescription(), LocalDateTime.now(), LocalDateTime.now(), 1)).flatMap(tran -> {
-                                      return Mono.just(new BaseResponse(ERROR_CODE_01, UPDATE_SUCCESSFULLY, null));
-                                  });
-                                } else {
-                                    // finby theo truon id -> neu co update laij ban ghi theo cac ttruong tu input,
-                                    //neu ko thoong bao update ko thanh cong
-                                    return transactionRepository.findById(transactionReq.getTransactionReqid()).flatMap(checkTransaction -> {
-                                        if (DataUtils.isNullOrEmpty(checkTransaction)) {
-                                            return transactionRepository.save(new Transaction(optionalTransaction.get().getId(), transactionReq.getTransactionReqTranId(), transactionReq.getTransactionReqTitle(), transactionReq.getTransactionReqAmount(), transactionReq.getTransactionReqDescription(), LocalDateTime.now(), LocalDateTime.now(), 1)).flatMap(tran -> {
-                                                return Mono.just(new BaseResponse(ERROR_CODE_01, UPDATE_SUCCESSFULLY, null));
-                                            });
-                                        } else {
-                                            return Mono.just(new BaseResponse(ERROR_CODE_500, UPDATE_UNSUCCESSFULLY, null));
-                                        }
-                                    });
-                                }
-                            }
-                        }
-                        if (!DataUtils.isNullOrEmpty(refundReq.getRefundReqTranId())) {
-                            //neu id == null -> insert ban ghi moi
-                            if (DataUtils.isNullOrEmpty(refundReq.getRefundReqId())) {
-                                return refundRepository.save(new Refund(null, refundReq.getRefundReqTranId(), refundReq.getRefundReqType(), refundReq.getRefundReqNote(), LocalDateTime.now(), LocalDateTime.now(), 1)).flatMap(ref -> {
-                                    return Mono.just(new BaseResponse(ERROR_CODE_01, SAVE_SUCCESSFULLY, null));
-                                });
-                            } else {
-                                //check finby truoc do tim thay ban ghi do chua neu roi thi update neu chua co thi findby lai vao dn
-                                Optional<Refund> optionalRefund = tuple.getT2().stream().filter(ref -> ref.getId().equals(refundReq.getRefundReqId())).findFirst();
-                                //check trong list da find truoc do
-                                //neu co thif ko phai find laij
-                                if (optionalRefund.isPresent()) {
-                                    return refundRepository.save(
-                                            new Refund(optionalRefund.get().getId(), refundReq.getRefundReqTranId(), refundReq.getRefundReqType(), refundReq.getRefundReqNote(), LocalDateTime.now(), LocalDateTime.now(), 1)
-                                    ).flatMap(refund -> {
-                                        return Mono.just(new BaseResponse(ERROR_CODE_01, UPDATE_SUCCESSFULLY, null));
-                                    });
-                                } else {
-                                    return refundRepository.findById(refundReq.getRefundReqId()).flatMap(checkRefund -> {
-                                        if (DataUtils.isNullOrEmpty(checkRefund)) {
-                                            return refundRepository.save(
-                                                    new Refund(refundReq.getRefundReqId(), refundReq.getRefundReqTranId(), refundReq.getRefundReqType(), refundReq.getRefundReqNote(), LocalDateTime.now(), LocalDateTime.now(), 1)
-                                            ).flatMap(a -> {
-                                                return Mono.just(new BaseResponse(ERROR_CODE_01, UPDATE_SUCCESSFULLY, null));
-                                            });
-                                        }
-                                        return Mono.just(new BaseResponse(ERROR_CODE_500, UPDATE_UNSUCCESSFULLY, null));
-                                    });
-                                }
-                            }
-                        }
-                        if (DataUtils.isNullOrEmpty(tuple.getT1())) {
-                            return Mono.just(new BaseResponse(ERROR_CODE_500, "Thành cong", null));
-                        }
-                        if (DataUtils.isNullOrEmpty(tuple.getT2())) {
-                            return Mono.just(new BaseResponse(ERROR_CODE_500, "Thành cong", null));
-                        }
-                        eachDecl.getChildCustomerList().forEach(childCus -> {
-                            Optional<Transaction> transactionOptional = tuple.getT1().stream().filter(transaction -> transaction.getTranId().equals(childCus.getTranId())).findFirst();
-                            if (transactionOptional.isPresent()) {
-                                Transaction transaction = transactionOptional.get();
-                                //Truong hop isDelete = true -> xoa cac ban ghi (DELETE)
-                                if (!DataUtils.isNullOrEmpty(isDelete) && isDelete) {
-                                    transaction.setStatus(0);
-                                    transaction.setUpdatedAt(LocalDateTime.now());
-                                    transactionRepository.save(transaction).subscribe(a -> {
-                                    });
-                                }
-                                //set lai cac truong amount, title, description (GET)
-                                childCus.setAmount(transaction.getAmount());
-                                childCus.setTitle(transaction.getTitle());
-                                childCus.setDescription(transaction.getDescription());
-                            }
-                        });
-                        eachDecl.getClassCustomerList().forEach(classCus -> {
-                            Optional<Refund> refundOptional = tuple.getT2().stream().filter(refund -> refund.getTranId().equals(classCus.getTranId())).findFirst();
-                            if (refundOptional.isPresent()) {
-                                Refund refund = refundOptional.get();
-                                if (!DataUtils.isNullOrEmpty(isDelete) && isDelete) {
-                                    refund.setStatus(0);
-                                    refund.setUpdatedAt(LocalDateTime.now());
-                                    refundRepository.save(refund).subscribe(a -> {
-                                    });
-                                }
-                                //set lai cac truong type, note
-                                classCus.setType(refund.getType());
-                                classCus.setNote(refund.getNote());
-                            }
-                        });
-                        if (!DataUtils.isNullOrEmpty(isDelete) && isDelete) {
-                            return Mono.just(new BaseResponse(ERROR_CODE_01, "Xoá Thành công", null));
-                        }
-                        //xắp xếp danh sách childCustomer tang dan
-                        eachDecl.getChildCustomerList().sort(Comparator.comparing(ChildCustomerMapDTO::getSort));
-                        //xắp xếp danh sách clasCustomer giam dan
-                        eachDecl.getClassCustomerList().sort(Comparator.comparing(ClassCustomerMapDTO::getSort).reversed());
-                        return Mono.just(new BaseResponse(ERROR_CODE_01, "TC", eachDecl));
-                    });
+    public Mono<BaseResponse> getListDeclCustomerV1(TransactionReq transactionReq, RefundReq refundReq, Boolean isDelete) {
+        return apiService.getDecl(DECL_CODE)
+                .flatMap(decl -> {
+                    if (DataUtils.isNullOrEmpty(decl)) {
+                        return Mono.error(new BusinessException(ERROR_CODE_500, NOT_FOUND_DECL, null));
+                    }
+                    return parseAndProcessDecl(decl.getValue(), transactionReq, refundReq, isDelete);
                 });
-            });
-        });
     }
 
+    private Mono<BaseResponse> parseAndProcessDecl(String declValue, TransactionReq transactionReq, RefundReq refundReq, Boolean isDelete) {
+        return DataUtils.parseStringToObject(declValue, DeclInputDTO.class)
+                .flatMap(parsedDecl -> {
+                    if (DataUtils.isNullOrEmpty(parsedDecl)){
+                        return Mono.just(new BaseResponse(ERROR_CODE_500, PARSE_DATA_UNSUCCESSFULLY, null));
+                    }
+                    DeclOutputDTO declOutputDTO = createDeclOutputDTO(parsedDecl);
+                    return processTransactionsAndRefunds(declOutputDTO, transactionReq, refundReq, isDelete);
+                });
+    }
+
+    private DeclOutputDTO createDeclOutputDTO(DeclInputDTO parsedDecl) {
+        return DeclOutputDTO.builder()
+                .name(parsedDecl.getName())
+                .sortOrder(parsedDecl.getSortOrder())
+                .childCustomerList(new ArrayList<>(parsedDecl.getChildCustomer().values()))
+                .classCustomerList(new ArrayList<>(parsedDecl.getClassCustomer().values()))
+                .build();
+    }
+
+    private Mono<BaseResponse> processTransactionsAndRefunds(DeclOutputDTO declOutputDTO, TransactionReq transactionReq, RefundReq refundReq, Boolean isDelete) {
+        return Mono.zip(
+                transactionRepository.findAllByTranId(getTranIds(declOutputDTO.getChildCustomerList())).collectList(),
+                refundRepository.findAllByTranId(getTranIds(declOutputDTO.getClassCustomerList())).collectList()
+        ).flatMap(tuple -> handleRequests(transactionReq, refundReq, isDelete, declOutputDTO, tuple.getT1(), tuple.getT2()));
+    }
+
+    private <T> java.util.List<String> getTranIds(java.util.List<T> list) {
+        return list.stream()
+                .map(item -> {
+                    if (item instanceof ChildCustomerMapDTO) return ((ChildCustomerMapDTO) item).getTranId();
+                    else if (item instanceof ClassCustomerMapDTO) return ((ClassCustomerMapDTO) item).getTranId();
+                    else return null;
+                })
+                .collect(Collectors.toList());
+    }
+
+    private Mono<BaseResponse> handleRequests(TransactionReq transactionReq, RefundReq refundReq, Boolean isDelete, DeclOutputDTO declOutputDTO, java.util.List<Transaction> transactions, java.util.List<Refund> refunds) {
+        return handleTransaction(transactionReq, transactions)
+                .thenReturn(handleRefund(refundReq, refunds))
+                .thenReturn(updateCustomerDetails(declOutputDTO, isDelete, transactions, refunds))
+                .thenReturn(new BaseResponse(ERROR_CODE_01, "Success", declOutputDTO));
+
+    }
+
+    private Mono<BaseResponse> handleTransaction(TransactionReq transactionReq, java.util.List<Transaction> transactions) {
+        if (!transactionReq.isValidate()) {
+            return Mono.just(  new BaseResponse(ERROR_CODE_01, SAVE_UNSUCCESSFULLY, null));
+        }
+
+        return findAndSaveTransaction(transactionReq, transactions);
+    }
+
+    private Mono<BaseResponse> findAndSaveTransaction(TransactionReq transactionReq, java.util.List<Transaction> transactions) {
+      //validate input
+        transactionReq.isValidate();
+       //Neu ipput ko co truyen id - insert ban ghi moi
+        if (DataUtils.isNullOrEmpty(transactionReq.getTransactionReqid())){
+           Transaction transaction = new Transaction();
+           transaction.setTranId(transactionReq.getTransactionReqTranId());
+           transaction.setTitle(transactionReq.getTransactionReqTitle());
+           transaction.setAmount(transactionReq.getTransactionReqAmount());
+           transaction.setDescription(transactionReq.getTransactionReqDescription());
+           transaction.setUpdatedAt(LocalDateTime.now());
+           transaction.setStatus(ACTIVE_STATUS);
+           return transactionRepository.save(transaction).map(tran -> {
+               return new BaseResponse(ERROR_CODE_01, SAVE_UNSUCCESSFULLY, null);
+           });
+       }
+        //neu iput cis truyen id -> neu khong tim thay transaction thi bao loi
+        //neu tim thay thif update lai cac truong vao db
+        return transactionRepository.findById(transactionReq.getTransactionReqid())
+                .flatMap(transaction -> {
+                    if (DataUtils.isNullOrEmpty(transaction)){
+                        return Mono.error(new BusinessException(ERROR_CODE_500, NOT_FOUND_TRANSACTION,null));
+                    }
+                    transaction.setTranId(transactionReq.getTransactionReqTranId());
+                    transaction.setTitle(transactionReq.getTransactionReqTitle());
+                    transaction.setAmount(transactionReq.getTransactionReqAmount());
+                    transaction.setDescription(transactionReq.getTransactionReqDescription());
+                    transaction.setUpdatedAt(LocalDateTime.now());
+                    transaction.setStatus(1);
+                    if (!DataUtils.isNullOrEmpty(transactionReq.getTransactionReqid())){
+                        transaction.setId(transactionReq.getTransactionReqid());
+                        return transactionRepository.save(transaction).map(tran -> {
+                            return new BaseResponse(ERROR_CODE_01, SAVE_UNSUCCESSFULLY, null);
+                        });
+                    }
+                    return transactionRepository.save(transaction).map(tran -> {
+                        return new BaseResponse(ERROR_CODE_01, SAVE_UNSUCCESSFULLY, null);
+                    });
+                });
+    }
+    private Mono<BaseResponse> handleRefund(RefundReq refundReq, java.util.List<Refund> refunds) {
+        if (DataUtils.isNullOrEmpty(refundReq.getRefundReqTranId())) return Mono.empty();
+
+        return findAndSaveRefund(refundReq, refunds)
+                .flatMap(ref -> Mono.just(new BaseResponse(ERROR_CODE_01, SAVE_UNSUCCESSFULLY, null)));
+    }
+
+    private Mono<BaseResponse> findAndSaveRefund(RefundReq refundReq, java.util.List<Refund> refunds) {
+        //validate input
+        refundReq.isValidate();
+        //Neu ipput ko co truyen id - insert ban ghi moi
+        if (DataUtils.isNullOrEmpty(refundReq.getRefundReqId())){
+            Refund refund = new Refund();
+            refund.setTranId(refundReq.getRefundReqTranId());
+            refund.setType(refundReq.getRefundReqType());
+            refund.setNote(refundReq.getRefundReqNote());
+            refund.setUpdatedAt(LocalDateTime.now());
+            refund.setStatus(ACTIVE_STATUS);
+            return refundRepository.save(refund).map(tran -> {
+                return new BaseResponse(ERROR_CODE_01, SAVE_UNSUCCESSFULLY, null);
+            });
+        }
+        return refundRepository.findById(refundReq.getRefundReqId())
+                .flatMap(refund -> {
+                    if (DataUtils.isNullOrEmpty(refund)){
+                        return Mono.error(new BusinessException(ERROR_CODE_500, NOT_FOUND_TRANSACTION,null));
+                    }
+                    refund.setTranId(refundReq.getRefundReqTranId());
+                    refund.setType(refundReq.getRefundReqType());
+                    refund.setNote(refundReq.getRefundReqNote());
+                    refund.setUpdatedAt(LocalDateTime.now());
+                    refund.setStatus(1);
+                    return refundRepository.save(refund).map(ref -> new BaseResponse(ERROR_CODE_01, SAVE_UNSUCCESSFULLY, null));
+                });
+    }
+    private Mono<BaseResponse> updateCustomerDetails(DeclOutputDTO declOutputDTO, Boolean isDelete, java.util.List<Transaction> transactions, java.util.List<Refund> refunds) {
+        declOutputDTO.getChildCustomerList().forEach(child -> updateChildCustomer(child, transactions, isDelete));
+        declOutputDTO.getClassCustomerList().forEach(cls -> updateClassCustomer(cls, refunds, isDelete));
+
+        sortCustomers(declOutputDTO);
+        return Mono.just(new BaseResponse(ERROR_CODE_01, UPDATE_SUCCESSFULLY, null));
+    }
+
+    private void updateChildCustomer(ChildCustomerMapDTO child, java.util.List<Transaction> transactions, Boolean isDelete) {
+        transactions.stream()
+                .filter(transaction -> transaction.getTranId().equals(child.getTranId()))
+                .findFirst()
+                .ifPresent(transaction -> {
+                    if (Boolean.TRUE.equals(isDelete)) {
+                        transaction.setStatus(0);
+                        transaction.setUpdatedAt(LocalDateTime.now());
+                        transactionRepository.save(transaction).subscribe();
+                    } else {
+                        child.setAmount(transaction.getAmount());
+                        child.setTitle(transaction.getTitle());
+                        child.setDescription(transaction.getDescription());
+                    }
+                });
+    }
+
+    private void updateClassCustomer(ClassCustomerMapDTO cls, java.util.List<Refund> refunds, Boolean isDelete) {
+        refunds.stream()
+                .filter(refund -> refund.getTranId().equals(cls.getTranId()))
+                .findFirst()
+                .ifPresent(refund -> {
+                    if (Boolean.TRUE.equals(isDelete)) {
+                        refund.setStatus(0);
+                        refund.setUpdatedAt(LocalDateTime.now());
+                        refundRepository.save(refund).subscribe();
+                    } else {
+                        cls.setType(refund.getType());
+                        cls.setNote(refund.getNote());
+                    }
+                });
+    }
+
+    private void sortCustomers(DeclOutputDTO declOutputDTO) {
+        declOutputDTO.getChildCustomerList().sort(Comparator.comparing(ChildCustomerMapDTO::getSort));
+        declOutputDTO.getClassCustomerList().sort(Comparator.comparing(ClassCustomerMapDTO::getSort).reversed());
+    }
 }

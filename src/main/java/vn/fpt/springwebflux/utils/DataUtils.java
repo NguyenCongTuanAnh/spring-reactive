@@ -8,6 +8,8 @@ import vn.fpt.springwebflux.exception.BusinessException;
 import java.util.Collection;
 import java.util.Map;
 
+import static vn.fpt.springwebflux.constant.CommonConstant.INPUT_NOT_VALID;
+import static vn.fpt.springwebflux.constant.CommonConstant.PARSE_DATA_UNSUCCESSFULLY;
 import static vn.fpt.springwebflux.constant.ErrorCodeConstant.ERROR_CODE_500;
 
 public class DataUtils {
@@ -27,13 +29,13 @@ public class DataUtils {
 
     public static <T> Mono<T> parseStringToObject(String values, Class<T> clazz) {
         if (DataUtils.isNullOrEmpty(values)) {
-            return Mono.error(new BusinessException(ERROR_CODE_500, "Đầu vào không có dữ liệu", null));
+            return Mono.error(new BusinessException(ERROR_CODE_500, INPUT_NOT_VALID, null));
         }
         try {
             T result = new ObjectMapper().readValue(values, clazz);
             return Mono.just(result);
         } catch (JsonProcessingException e) {
-            return Mono.error(new BusinessException(ERROR_CODE_500, "Chuyển đổi dữ liệu không thành công!!!", null));
+            return Mono.error(new BusinessException(ERROR_CODE_500, PARSE_DATA_UNSUCCESSFULLY, null));
         }
     }
 
