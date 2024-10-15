@@ -13,17 +13,34 @@ import static vn.fpt.springwebflux.constant.CommonConstant.PARSE_DATA_UNSUCCESSF
 import static vn.fpt.springwebflux.constant.ErrorCodeConstant.ERROR_CODE_500;
 
 public class DataUtils {
-    public static <T> boolean isNullOrEmpty(T input) {
-        if (input == null) {
+
+    public static boolean isNullOrEmpty(CharSequence cs) {
+        int strLen;
+        if (cs == null || (strLen = cs.length()) == 0) {
             return true;
         }
-        if (input instanceof String && ((String) input).isEmpty()) {
-            return true;
+        for (int i = 0; i < strLen; i++) {
+            if (!Character.isWhitespace(cs.charAt(i))) {
+                return false;
+            }
         }
-        if (input instanceof Collection && ((Collection<?>) input).isEmpty()) {
-            return true;
-        }
-        return input instanceof Map && ((Map<?, ?>) input).isEmpty();
+        return true;
+    }
+
+    public static boolean isNullOrEmpty(final Collection<?> collection) {
+        return collection == null || collection.isEmpty();
+    }
+
+    public static boolean isNullOrEmpty(final Object[] collection) {
+        return collection == null || collection.length == 0;
+    }
+
+    public static boolean isNullOrEmpty(final Map<?, ?> map) {
+        return map == null || map.isEmpty();
+    }
+
+    public static boolean isNullOrEmpty(Object obj1) {
+        return obj1 == null || obj1.toString().trim().equals("");
     }
 
 

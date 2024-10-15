@@ -5,7 +5,6 @@ import org.springframework.data.r2dbc.repository.R2dbcRepository;
 import org.springframework.stereotype.Repository;
 import reactor.core.publisher.Flux;
 import vn.fpt.springwebflux.model.mysql.Refund;
-import vn.fpt.springwebflux.model.mysql.Transaction;
 
 import java.util.List;
 

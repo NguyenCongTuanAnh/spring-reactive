@@ -1,6 +1,7 @@
 package vn.fpt.springwebflux.constant;
 
 public class ErrorCodeConstant {
+    public static Long ERROR_CODE_00 = 0L;
     public static Long ERROR_CODE_01 = 1L;
     public static Long ERROR_CODE_02 = 2L;
     public static Long ERROR_CODE_03 = 3L;
