@@ -2,7 +2,6 @@ package vn.fpt.springwebflux.service.impl;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
-import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import vn.fpt.springwebflux.exception.BusinessException;
 import vn.fpt.springwebflux.model.dto.ChildCustomerMapDTO;
@@ -24,7 +23,6 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
-import java.util.Optional;
 import java.util.stream.Collectors;
 
 import static vn.fpt.springwebflux.constant.CommonConstant.*;
@@ -59,9 +57,9 @@ public class RefundServiceImpl implements RefundService {
                     DeclOutputDTO eachDecl = DeclOutputDTO.builder()
                             .name(parseDecl.getName())
                             .sortOrder(parseDecl.getSortOrder())
+                            .childCustomerList(new ArrayList<>(parseDecl.getChildCustomer().values()))
+                            .classCustomerList(new ArrayList<>(parseDecl.getClassCustomer().values()))
                             .build();
-//                    List<ChildCustomerMapDTO> classCustomerMapDTOList = new ArrayList<>(parseDecl.getChildCustomer().values());
-//                    List<ClassCustomerMapDTO> childCustomerMapDTOList = new ArrayList<>(parseDecl.getClassCustomer().values());
                     return Mono.zip(transactionRepository.findAllByTranId((eachDecl.getChildCustomerList().stream().map(ChildCustomerMapDTO::getTranId).collect(Collectors.toList()))).collectList(),
                                     refundRepository.findAllByTranId((eachDecl.getClassCustomerList().stream().map(ClassCustomerMapDTO::getTranId).collect(Collectors.toList()))).collectList())
                             .flatMap(tuple -> {
@@ -74,8 +72,8 @@ public class RefundServiceImpl implements RefundService {
                                     refundReq.isValidate();
                                     return handleSaveRefund(refundReq, tuple.getT2());
                                 }
-                                if(isDelete){
-                                    handleDelele(transactionReq, refundReq, tuple.getT1(), tuple.getT2());
+                                if (!DataUtils.isNullOrEmpty(isDelete) && isDelete) {
+                                    return handleDelele(transactionReq, refundReq, tuple.getT1(), tuple.getT2());
                                 }
                                 eachDecl.setChildCustomerList(handleChildCus(eachDecl.getChildCustomerList(), tuple.getT1()));
                                 eachDecl.setClassCustomerList(handleClassCus(eachDecl.getClassCustomerList(), tuple.getT2()));
@@ -88,51 +86,54 @@ public class RefundServiceImpl implements RefundService {
                             });
                 });
     }
-    public Mono<BaseResponse> handleDelele (TransactionReq transactionReq, RefundReq refundReq, List<Transaction> transactionList, List<Refund> refundList){
 
-            if(DataUtils.isNullOrEmpty(transactionReq.getTransactionReqid()) && DataUtils.isNullOrEmpty(refundReq.getRefundReqId())){
-                if (DataUtils.isNullOrEmpty(transactionReq.getTransactionReqid())){
-                    return Mono.just(new BaseResponse(ERROR_CODE_01, REFUND_REQ_ID_NOT_VALID, null));
+    public Mono<BaseResponse> handleDelele(TransactionReq transactionReq, RefundReq refundReq, List<Transaction> transactionList, List<Refund> refundList) {
+
+        if (DataUtils.isNullOrEmpty(transactionReq.getTransactionReqid()) && DataUtils.isNullOrEmpty(refundReq.getRefundReqId())) {
+            if (DataUtils.isNullOrEmpty(transactionReq.getTransactionReqid())) {
+                return Mono.just(new BaseResponse(ERROR_CODE_01, REFUND_REQ_ID_NOT_VALID, null));
+            }
+            return Mono.just(new BaseResponse(ERROR_CODE_01, TRANSACTION_REQ_ID_NOT_VALID, null));
+        }
+        if (!DataUtils.isNullOrEmpty(transactionReq.getTransactionReqid())) {
+            Transaction transaction = transactionList.stream()
+                    .filter(tran -> tran.getId().equals(transactionReq.getTransactionReqid()))
+                    .findFirst().orElse(null);
+            if (DataUtils.isNullOrEmpty(transaction)) {
+                transaction.setStatus(0);
+                transaction.setUpdatedAt(LocalDateTime.now());
+                return transactionRepository.save(transaction).flatMap(tran -> Mono.just(new BaseResponse(ERROR_CODE_00, DELETE_SUCCESSFULLY, null)));
+            }
+            return transactionRepository.findById(transactionReq.getTransactionReqid()).flatMap(tran -> {
+                if (DataUtils.isNullOrEmpty(tran)) {
+                    return Mono.just(new BaseResponse(ERROR_CODE_01, TRANSACTION_REQ_ID_NOT_EXSITED, null));
                 }
-                return Mono.just(new BaseResponse(ERROR_CODE_01, TRANSACTION_REQ_ID_NOT_VALID, null));
+                tran.setStatus(0);
+                tran.setUpdatedAt(LocalDateTime.now());
+                return transactionRepository.save(transaction).flatMap(tranDel -> Mono.just(new BaseResponse(ERROR_CODE_00, DELETE_SUCCESSFULLY, null)));
+            });
+        }
+        if (!DataUtils.isNullOrEmpty(refundReq.getRefundReqId())) {
+            Refund refund = refundList.stream()
+                    .filter(ref -> ref.getId().equals(refundReq.getRefundReqId()))
+                    .findFirst().orElse(null);
+            if (DataUtils.isNullOrEmpty(refund)) {
+                refund.setStatus(0);
+                refund.setUpdatedAt(LocalDateTime.now());
+                return refundRepository.save(refund).flatMap(tran -> Mono.just(new BaseResponse(ERROR_CODE_00, DELETE_SUCCESSFULLY, null)));
             }
-            if (!DataUtils.isNullOrEmpty(transactionReq.getTransactionReqid())){
-               Transaction transaction =  transactionList.stream()
-                        .filter(tran -> tran.getId().equals(transactionReq.getTransactionReqid()))
-                        .findFirst().orElse(null);
-                       if (DataUtils.isNullOrEmpty(transaction)){
-                           transaction.setStatus(0);
-                           transaction.setUpdatedAt(LocalDateTime.now());
-                           return transactionRepository.save(transaction).flatMap(tran -> Mono.just(new BaseResponse(ERROR_CODE_00, DELETE_SUCCESSFULLY, null)));
-                       }
-                       return transactionRepository.findById(transactionReq.getTransactionReqid()).flatMap(tran -> {
-                          if (DataUtils.isNullOrEmpty(tran)){
-                              return Mono.just(new BaseResponse(ERROR_CODE_01, TRANSACTION_REQ_ID_NOT_EXSITED, null));
-                          }
-                           tran.setStatus(0);
-                           tran.setUpdatedAt(LocalDateTime.now());
-                           return transactionRepository.save(transaction).flatMap(tranDel -> Mono.just(new BaseResponse(ERROR_CODE_00, DELETE_SUCCESSFULLY, null)));
-                       });
-            }
-            if (!DataUtils.isNullOrEmpty(refundReq.getRefundReqId())){
-                Refund refund =  refundList.stream()
-                        .filter(ref -> ref.getId().equals(refundReq.getRefundReqId()))
-                        .findFirst().orElse(null);
-                if (DataUtils.isNullOrEmpty(refund)){
-                    refund.setStatus(0);
-                    refund.setUpdatedAt(LocalDateTime.now());
-                    return refundRepository.save(refund).flatMap(tran -> Mono.just(new BaseResponse(ERROR_CODE_00, DELETE_SUCCESSFULLY, null)));
+            return refundRepository.findById(refundReq.getRefundReqId()).flatMap(ref -> {
+                if (DataUtils.isNullOrEmpty(ref)) {
+                    return Mono.just(new BaseResponse(ERROR_CODE_01, REFUND_REQ_ID_NOT_EXSITED, null));
                 }
-                return refundRepository.findById(refundReq.getRefundReqId()).flatMap(ref -> {
-                    if (DataUtils.isNullOrEmpty(ref)){
-                        return Mono.just(new BaseResponse(ERROR_CODE_01, REFUND_REQ_ID_NOT_EXSITED, null));
-                    }
-                    ref.setStatus(0);
-                    ref.setUpdatedAt(LocalDateTime.now());
-                    return refundRepository.save(ref).flatMap(tranDel -> Mono.just(new BaseResponse(ERROR_CODE_00, DELETE_SUCCESSFULLY, null)));
-                });
-            }
+                ref.setStatus(0);
+                ref.setUpdatedAt(LocalDateTime.now());
+                return refundRepository.save(ref).flatMap(tranDel -> Mono.just(new BaseResponse(ERROR_CODE_00, DELETE_SUCCESSFULLY, null)));
+            });
+        }
+        return Mono.just(new BaseResponse(ERROR_CODE_00, DELETE_UNSUCCESSFULLY, null));
     }
+
     public List<ChildCustomerMapDTO> handleChildCus(List<ChildCustomerMapDTO> childCustomerMapDTOList, List<Transaction> transactionList) {
         childCustomerMapDTOList.forEach(childCus -> {
             Transaction transactionOptional = transactionList.stream().filter(transaction -> transaction.getTranId().equals(childCus.getTranId())).findFirst().orElse(null);
@@ -143,6 +144,7 @@ public class RefundServiceImpl implements RefundService {
         });
         return childCustomerMapDTOList;
     }
+
     public List<ClassCustomerMapDTO> handleClassCus(List<ClassCustomerMapDTO> classCustomerMapDTOList, List<Refund> refundList) {
         classCustomerMapDTOList.forEach(classCus -> {
             Refund refund = refundList.stream().filter(transaction -> transaction.getTranId().equals(classCus.getTranId())).findFirst().orElse(null);
@@ -210,7 +212,7 @@ public class RefundServiceImpl implements RefundService {
             optionalTransaction.setTitle(transactionReq.getTransactionReqTitle());
             optionalTransaction.setAmount(transactionReq.getTransactionReqAmount());
             optionalTransaction.setDescription(transactionReq.getTransactionReqDescription());
-            optionalTransaction.setUpdatedAt( LocalDateTime.now());
+            optionalTransaction.setUpdatedAt(LocalDateTime.now());
             return transactionRepository.save(optionalTransaction)
                     .flatMap(tran -> Mono.just(new BaseResponse(ERROR_CODE_00, UPDATE_SUCCESSFULLY, null)));
         }
@@ -223,7 +225,7 @@ public class RefundServiceImpl implements RefundService {
                         checkTransaction.setTitle(transactionReq.getTransactionReqTitle());
                         checkTransaction.setAmount(transactionReq.getTransactionReqAmount());
                         checkTransaction.setDescription(transactionReq.getTransactionReqDescription());
-                        checkTransaction.setUpdatedAt( LocalDateTime.now());
+                        checkTransaction.setUpdatedAt(LocalDateTime.now());
                         return transactionRepository.save(checkTransaction)
                                 .flatMap(tran -> Mono.just(new BaseResponse(ERROR_CODE_00, UPDATE_SUCCESSFULLY, null)));
                     }
